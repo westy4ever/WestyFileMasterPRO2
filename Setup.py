@@ -116,7 +116,8 @@ except ImportError as e:
 
 # Import our plugin's utilities
 try:
-    from . import (
+    # Changed from relative import to absolute import
+    from __init__ import (
         _,
         debug_print,
         ensure_str,
@@ -124,7 +125,8 @@ try:
         PLUGIN_NAME,
         PLUGIN_VERSION
     )
-except ImportError:
+except ImportError as e:
+    print(f"Warning: Could not import from __init__: {e}")
     # Fallback for testing
     def _(text):
         return text
@@ -148,37 +150,43 @@ except ImportError:
     PLUGIN_NAME = "Westy FileMaster PRO"
     PLUGIN_VERSION = "2.1.0"
 
-FULLHD = getDesktop(0).size().width() >= 1920
-
 class WestyFileMasterSetup(ConfigListScreen, Screen):
     """Setup screen for Westy FileMaster PRO v2.1.0"""
     
-    if FULLHD:
-        skin = """
-        <screen position="center,center" size="1000,750" title="{title} v{version} - Setup">
-            <widget name="config" position="50,50" size="900,550" itemHeight="35" scrollbarMode="showOnDemand"/>
-            <widget source="key_red" render="Label" position="100,650" size="200,40" font="Regular;24" foregroundColor="#ffffff" backgroundColor="red" halign="center" valign="center"/>
-            <widget source="key_green" render="Label" position="400,650" size="200,40" font="Regular;24" foregroundColor="#ffffff" backgroundColor="green" halign="center" valign="center"/>
-            <widget source="key_blue" render="Label" position="700,650" size="200,40" font="Regular;24" foregroundColor="#ffffff" backgroundColor="blue" halign="center" valign="center"/>
-            <widget name="version" position="50,700" size="900,20" font="Regular;16" foregroundColor="#888888" halign="center"/>
-        </screen>
-        """.format(title=PLUGIN_NAME, version=PLUGIN_VERSION)
-    else:
-        skin = """
-        <screen position="center,center" size="800,550" title="{title} v{version} - Setup">
-            <widget name="config" position="50,50" size="700,400" itemHeight="30" scrollbarMode="showOnDemand"/>
-            <widget source="key_red" render="Label" position="50,470" size="200,30" font="Regular;20" foregroundColor="#ffffff" backgroundColor="red" halign="center"/>
-            <widget source="key_green" render="Label" position="300,470" size="200,30" font="Regular;20" foregroundColor="#ffffff" backgroundColor="green" halign="center"/>
-            <widget source="key_blue" render="Label" position="550,470" size="200,30" font="Regular;20" foregroundColor="#ffffff" backgroundColor="blue" halign="center"/>
-            <widget name="version" position="50,510" size="700,20" font="Regular;14" foregroundColor="#888888" halign="center"/>
-        </screen>
-        """.format(title=PLUGIN_NAME, version=PLUGIN_VERSION)
+    # Skin templates - will be selected based on resolution
+    SKIN_FULLHD = """
+    <screen position="center,center" size="1000,750" title="{title} v{version} - Setup">
+        <widget name="config" position="50,50" size="900,550" itemHeight="35" scrollbarMode="showOnDemand"/>
+        <widget source="key_red" render="Label" position="100,650" size="200,40" font="Regular;24" foregroundColor="#ffffff" backgroundColor="red" halign="center" valign="center"/>
+        <widget source="key_green" render="Label" position="400,650" size="200,40" font="Regular;24" foregroundColor="#ffffff" backgroundColor="green" halign="center" valign="center"/>
+        <widget source="key_blue" render="Label" position="700,650" size="200,40" font="Regular;24" foregroundColor="#ffffff" backgroundColor="blue" halign="center" valign="center"/>
+        <widget name="version" position="50,700" size="900,20" font="Regular;16" foregroundColor="#888888" halign="center"/>
+    </screen>
+    """
+    
+    SKIN_SD = """
+    <screen position="center,center" size="800,550" title="{title} v{version} - Setup">
+        <widget name="config" position="50,50" size="700,400" itemHeight="30" scrollbarMode="showOnDemand"/>
+        <widget source="key_red" render="Label" position="50,470" size="200,30" font="Regular;20" foregroundColor="#ffffff" backgroundColor="red" halign="center"/>
+        <widget source="key_green" render="Label" position="300,470" size="200,30" font="Regular;20" foregroundColor="#ffffff" backgroundColor="green" halign="center"/>
+        <widget source="key_blue" render="Label" position="550,470" size="200,30" font="Regular;20" foregroundColor="#ffffff" backgroundColor="blue" halign="center"/>
+        <widget name="version" position="50,510" size="700,20" font="Regular;14" foregroundColor="#888888" halign="center"/>
+    </screen>
+    """
     
     def __init__(self, session):
         Screen.__init__(self, session)
         ConfigListScreen.__init__(self, [], session=session)
         
+        # Determine screen resolution safely
+        self.FULLHD = self._detect_screen_resolution()
+        
+        # Apply skin based on resolution
+        skin_template = self.SKIN_FULLHD if self.FULLHD else self.SKIN_SD
+        self.skin = skin_template.format(title=PLUGIN_NAME, version=PLUGIN_VERSION)
+        
         debug_print(f"WestyFileMasterSetup: Initializing setup screen v{PLUGIN_VERSION}")
+        debug_print(f"Screen resolution: {'FullHD (1920+)' if self.FULLHD else 'SD (<1920)'}")
         
         # Initialize configuration if not exists
         self.initConfig()
@@ -208,6 +216,22 @@ class WestyFileMasterSetup(ConfigListScreen, Screen):
         }, -1)
         
         self.onLayoutFinish.append(self.layoutFinished)
+    
+    def _detect_screen_resolution(self):
+        """Safely detect screen resolution"""
+        try:
+            if ENIGMA2_AVAILABLE:
+                desktop = getDesktop(0)
+                width = desktop.size().width()
+                debug_print(f"Detected screen width: {width}px")
+                return width >= 1920
+            else:
+                # In test mode, assume FullHD
+                return True
+        except Exception as e:
+            debug_print(f"Error detecting screen resolution: {e}")
+            # Default to FullHD for safety
+            return True
     
     def initConfig(self):
         """Initialize configuration if needed"""
@@ -520,5 +544,7 @@ if __name__ == "__main__":
         print(f"✓ Plugin version: {PLUGIN_VERSION}")
     except Exception as e:
         print(f"✗ Error: {e}")
+        import traceback
+        traceback.print_exc()
     
     print("=" * 60)

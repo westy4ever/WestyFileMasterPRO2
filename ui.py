@@ -1,57 +1,71 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
+# ============================================================================
+# UI DEBUG PATCH - v2.1.0 CRITICAL FIX
+# ============================================================================
 from __future__ import print_function, absolute_import, division, unicode_literals
-
 import sys
 import os
-import time
-import shutil
 
-# ============================================================================
-# SIMPLE IMPORT FIX - Import from __init__ directly
-# ============================================================================
-try:
-    # First add current directory to Python path
-    PLUGIN_PATH = os.path.dirname(os.path.abspath(__file__))
-    if PLUGIN_PATH not in sys.path:
-        sys.path.insert(0, PLUGIN_PATH)
-    
-    # Import from __init__.py directly
-    import __init__ as plugin_init
-    
-    # Extract what we need
-    _ = plugin_init._
-    debug_print = plugin_init.debug_print
-    ensure_str = plugin_init.ensure_str
-    ensure_unicode = plugin_init.ensure_unicode
-    PLUGIN_NAME = plugin_init.PLUGIN_NAME
-    PLUGIN_VERSION = plugin_init.PLUGIN_VERSION
-    
-    # Try to get optional functions
+# UI Debug logging
+UI_DEBUG_LOG = "/tmp/westy_ui_debug.log"
+
+def gRGB(x): return x
+def ui_debug_log(message):
     try:
-        is_full_hd = plugin_init.is_full_hd
+        with open(UI_DEBUG_LOG, 'a') as f:
+            from datetime import datetime
+            timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            f.write(f"[{timestamp}] {message}\n")
+            f.flush()
+    except:
+        pass
+
+ui_debug_log("="*60)
+ui_debug_log("UI Module Loading")
+ui_debug_log("="*60)
+
+PLUGIN_PATH = os.path.dirname(os.path.abspath(__file__))
+if PLUGIN_PATH not in sys.path:
+    sys.path.insert(0, PLUGIN_PATH)
+    ui_debug_log(f"Added to path: {PLUGIN_PATH}")
+
+# CRITICAL FIX: Direct imports instead of "import __init__ as plugin_init"
+try:
+    ui_debug_log("Importing from __init__...")
+    from __init__ import (
+        _,
+        debug_print,
+        ensure_str,
+        ensure_unicode,
+        PLUGIN_NAME,
+        PLUGIN_VERSION
+    )
+    ui_debug_log(f"Successfully imported plugin utilities v{PLUGIN_VERSION}")
+    
+    try:
+        from __init__ import is_full_hd, get_icon_path, _
+        ui_debug_log("Imported optional functions")
     except:
         def is_full_hd(): return True
-    
-    try:
-        get_icon_path = plugin_init.get_icon_path
-    except:
         def get_icon_path(icon): return None
-    
-    debug_print(f"ui.py: Imported plugin utilities v{PLUGIN_VERSION}")
-    
+        ui_debug_log("Using fallback functions")
+        
 except Exception as e:
-    # Ultimate fallback
+    ui_debug_log(f"Import error: {e}")
     def _(text): return text
     def debug_print(*args, **kwargs):
-        if args: print("[UI DEBUG]", *args)
+        if args: 
+            msg = " ".join(str(a) for a in args)
+            ui_debug_log(msg)
     def ensure_str(s, encoding='utf-8'): return str(s)
     ensure_unicode = ensure_str
     PLUGIN_NAME = "Westy FileMaster PRO"
     PLUGIN_VERSION = "2.1.0"
     def is_full_hd(): return True
     def get_icon_path(icon): return None
-    print(f"ui.py: Critical import error: {e}")
+
+ui_debug_log("UI patch initialization complete")
 
 # ============================================================================
 # CACHE IMPORT WITH FALLBACK
@@ -88,24 +102,69 @@ except ImportError as e:
 # ENIGMA2 SCREEN IMPORTS
 # ============================================================================
 ENIGMA2_SCREENS_AVAILABLE = False
+
+# Debug BEFORE import attempt
+try:
+    with open("/tmp/westy_imports.log", "a") as f:
+        from datetime import datetime
+        f.write(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] ENIGMA2_SCREENS_AVAILABLE = {ENIGMA2_SCREENS_AVAILABLE} (before import attempt)\n")
+        f.write("  Screen class: NOT IMPORTED YET\n")
+except Exception as e:
+    pass
+
 try:
     from Screens.Screen import Screen
     from Components.ActionMap import ActionMap, HelpableActionMap
     from Components.Label import Label
+    from Components.MenuList import MenuList
     from Components.Sources.StaticText import StaticText
     from Components.Pixmap import Pixmap
     from Components.config import config
     from enigma import getDesktop, eTimer, RT_HALIGN_CENTER, RT_VALIGN_CENTER, gRGB
     ENIGMA2_SCREENS_AVAILABLE = True
+    
+    # Debug AFTER successful import
+    try:
+        with open("/tmp/westy_imports.log", "a") as f:
+            from datetime import datetime
+            f.write(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] ENIGMA2_SCREENS_AVAILABLE = {ENIGMA2_SCREENS_AVAILABLE} (imports successful!)\n")
+            f.write(f"  Screen class: {Screen}\n")
+            f.write(f"  Screen module: {Screen.__module__}\n")
+            f.write(f"  Screen has __setitem__: {hasattr(Screen, '__setitem__')}\n")
+    except Exception as e:
+        pass
+    
     debug_print("ui.py: Enigma2 screen imports successful")
 except ImportError as e:
     debug_print(f"ui.py: Enigma2 screen imports failed: {e}")
+    
+    # Debug for import failure
+    try:
+        with open("/tmp/westy_imports.log", "a") as f:
+            from datetime import datetime
+            f.write(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] ENIGMA2_SCREENS_AVAILABLE = False (imports failed: {e})\n")
+            f.write("  Using mock classes instead\n")
+    except Exception as e2:
+        pass
+    
     # Mock classes for testing
     class Screen:
-        def __init__(self, session): 
+        def __init__(self, session):
             self.session = session
             self.onLayoutFinish = []
             self.onClose = []
+            self._widgets = {}  # Dictionary to store widgets
+        
+        # Dictionary-like access for widgets
+        def __setitem__(self, key, value):
+            self._widgets[key] = value
+        
+        def __getitem__(self, key):
+            return self._widgets.get(key)
+        
+        def get(self, key, default=None):
+            return self._widgets.get(key, default)
+        
         def close(self): pass
         def execBegin(self): pass
         def execEnd(self): pass
@@ -118,14 +177,17 @@ except ImportError as e:
     HelpableActionMap = ActionMap
     
     class Label:
-        def __init__(self, text=""): self.text = text
-        def setText(self, text): self.text = text
+        def __init__(self, text=""): 
+            self.text = text
+        def setText(self, text): 
+            self.text = text
         def setForegroundColor(self, color): pass
         def hide(self): pass
         def show(self): pass
     
     class StaticText:
-        def __init__(self, text=""): self.text = text
+        def __init__(self, text=""): 
+            self.text = text
     
     class Pixmap:
         def __init__(self): pass
@@ -142,24 +204,36 @@ except ImportError as e:
     
     config = MockConfig()
     
-    def getDesktop(screen):
+    def getDesktop(screen=0):
         class Desktop:
             def size(self):
                 class Size:
-                    def width(self): return 1920
-                    def height(self): return 1080
+                    def width(self): 
+                        return 1920
+                    def height(self): 
+                        return 1080
                 return Size()
         return Desktop()
     
     class eTimer:
-        def __init__(self): self.callbacks = []
-        def start(self, interval): pass
-        def stop(self): pass
-        def timeout(self):
+        def __init__(self):
+            self.callbacks = []
+            self.timeout = self._create_timeout()
+        
+        def _create_timeout(self):
             class Timeout:
-                def get(self): return self
-                def append(self, func): self.callbacks.append(func)
-            return Timeout()
+                def __init__(self, parent):
+                    self.parent = parent
+                def get(self):
+                    return self
+                def append(self, func):
+                    self.parent.callbacks.append(func)
+            return Timeout(self)
+        
+        def start(self, interval): 
+            pass
+        def stop(self): 
+            pass
     
     RT_HALIGN_CENTER = 1
     RT_VALIGN_CENTER = 1
@@ -241,7 +315,7 @@ except Exception as e:
         debug_print(f"Mock playAudio called: {audio_file}")
 
 # ============================================================================
-# PLUGIN MODULE IMPORTS WITH FALLBACKS
+# PLUGIN MODULE IMPORTS WITH FALLBACKS - FIXED VERSION
 # ============================================================================
 # Try to import enhanced modules
 module_imports = {
@@ -257,26 +331,66 @@ module_imports = {
     'Setup': ('WestyFileMasterSetup', None)
 }
 
-# Import modules dynamically
+# Import modules dynamically with BETTER ERROR HANDLING
 for module_name, (primary_class, fallback_class) in module_imports.items():
     try:
+        ui_debug_log(f"Trying to import {module_name}.{primary_class}")
         module = __import__(f'.{module_name}', fromlist=[primary_class])
-        globals()[primary_class] = getattr(module, primary_class)
-        debug_print(f"ui.py: Imported {primary_class} from {module_name}")
+        
+        # Check if the class exists in the module
+        if hasattr(module, primary_class):
+            globals()[primary_class] = getattr(module, primary_class)
+            ui_debug_log(f"INFO: Imported {primary_class} from {module_name}")
+            debug_print(f"ui.py: Imported {primary_class} from {module_name}")
+        else:
+            raise ImportError(f"Class {primary_class} not found in {module_name}")
+            
     except ImportError as e:
+        ui_debug_log(f"ERROR: Failed to import {module_name}.{primary_class}: {e}")
         debug_print(f"ui.py: Failed to import {module_name}: {e}")
+        
         if fallback_class:
             globals()[primary_class] = fallback_class
+            ui_debug_log(f"WARNING: Using fallback class for {primary_class}")
         else:
-            # Create simple mock class
-            class MockClass:
-                def __init__(self, *args, **kwargs): pass
-                def __call__(self, *args, **kwargs): pass
-            globals()[primary_class] = MockClass
-
-# Check if Setup is available
-SETUP_AVAILABLE = 'WestyFileMasterSetup' in globals()
-
+            # Create ENHANCED mock class that has required methods
+            if primary_class == 'SmartDirectoryManager':
+                ui_debug_log(f"WARNING: Creating enhanced mock for {primary_class}")
+                class EnhancedMockDirManager:
+                    def __init__(self, *args, **kwargs): 
+                        ui_debug_log("EnhancedMockDirManager initialized")
+                    
+                    def get_recommended_directory(self, typ):
+                        # Always return a valid directory
+                        ui_debug_log(f"Mock get_recommended_directory({typ}) called")
+                        for path in ['/media/hdd/', '/home/root/', '/tmp/']:
+                            if os.path.isdir(path):
+                                return path
+                        return '/tmp/'
+                    
+                    def shorten_path(self, path, max_len):
+                        if len(path) > max_len:
+                            keep = (max_len - 3) // 2
+                            return path[:keep] + "..." + path[-keep:]
+                        return path
+                        
+                    def __getattr__(self, name):
+                        # Handle any other missing methods
+                        ui_debug_log(f"Mock method called: {name}")
+                        def dummy_method(*args, **kwargs):
+                            ui_debug_log(f"Dummy {name} called with args: {args}")
+                            return None
+                        return dummy_method
+                
+                globals()[primary_class] = EnhancedMockDirManager
+            else:
+                # For other modules, create simple mock
+                class MockClass:
+                    def __init__(self, *args, **kwargs): 
+                        ui_debug_log(f"MockClass {primary_class} initialized")
+                    def __call__(self, *args, **kwargs): 
+                        ui_debug_log(f"MockClass {primary_class} called")
+                globals()[primary_class] = MockClass
 # ============================================================================
 # TOOLS.DIRECTORIES IMPORTS
 # ============================================================================
@@ -302,12 +416,16 @@ except ImportError:
 class WestyFileMasterScreen(Screen):
     """Main file manager screen with dual panes"""
     
+    # Debug line should be inside __init__ or as a class variable, not here
+    # debug_print(f"ui.py: Inheriting from Screen class: {Screen}")  # REMOVED
+    
     # ========================================================================
-    # SKIN DEFINITION - FIXED: No variables in skin strings
+    # SKIN TEMPLATES - STATIC DEFINITIONS
     # ========================================================================
-    if is_full_hd():
-        skin = """
-<screen position="center,center" size="1920,1080" title="%s v%s" flags="wfNoBorder">
+    
+    # Full HD skin template (1920x1080)
+    SKIN_FULLHD = """
+<screen position="center,center" size="1920,1080" title="{} v{}" flags="wfNoBorder">
     <!-- Left Pane Background (Active/Inactive) -->
     <widget name="left_pane_bg" position="40,40" size="900,920" backgroundColor="#1a1a1a" transparent="0" zPosition="-1"/>
     <widget name="left_pane_active" position="40,40" size="6,920" backgroundColor="#00ff00" transparent="0" zPosition="0"/>
@@ -344,11 +462,11 @@ class WestyFileMasterScreen(Screen):
     <widget name="left_info" position="50,950" size="880,20" font="Regular;18" foregroundColor="#888888"/>
     <widget name="right_info" position="990,950" size="880,20" font="Regular;18" foregroundColor="#888888"/>
 </screen>
-""" % (_("Westy FileMaster PRO"), PLUGIN_VERSION)
-    else:
-        # Non-FULLHD skin (1280x720)
-        skin = """
-<screen position="center,center" size="1280,720" title="%s v%s">
+"""
+    
+    # HD skin template (1280x720)
+    SKIN_HD = """
+<screen position="center,center" size="1280,720" title="{} v{}">
     <!-- Left Pane -->
     <widget name="left_pane_bg" position="20,20" size="600,580" backgroundColor="#1a1a1a"/>
     <widget name="left_pane_active" position="20,20" size="4,580" backgroundColor="#00ff00"/>
@@ -380,49 +498,180 @@ class WestyFileMasterScreen(Screen):
     <widget source="key_yellow" render="Label" position="680,670" size="280,30" font="Regular;20" foregroundColor="#ffffff" backgroundColor="#ffff00" halign="center"/>
     <widget source="key_blue" render="Label" position="1000,670" size="280,30" font="Regular;20" foregroundColor="#ffffff" backgroundColor="#0000ff" halign="center"/>
 </screen>
-""" % (_("Westy FileMaster PRO"), PLUGIN_VERSION)
+"""
     
     # ========================================================================
     # INITIALIZATION
     # ========================================================================
     def __init__(self, session, path_left=None):
-        Screen.__init__(self, session)
-        debug_print("Initializing {} v{}".format(PLUGIN_NAME, PLUGIN_VERSION))
+        # Direct debug
+        try:
+            with open("/tmp/westy_screen_init.log", "a") as f:
+                from datetime import datetime
+                f.write(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] WestyFileMasterScreen.__init__ called\n")
+                f.write(f"  session: {session}\n")
+                f.write(f"  path_left: {path_left}\n")
+        except:
+            pass
         
-        # Initialize enhanced modules with proper error handling
-        self._initialize_modules()
-        
-        # Initialize multi-selection manager
-        self.selection_manager = SelectionManager()
-        self.batch_ops = BatchOperations()
-        
-        # Initialize panes
-        self.active_pane = "left"
-        self.left_pane_active = True
-        
-        # Selection state
-        self.multi_select_mode = False
-        self.last_selected_index = None
-        
-        # Initialize UI widgets
-        self._setup_widgets()
-        
-        # Initialize file lists
-        self.initializeFileLists(path_left)
-        
-        # Setup actions
-        self.setupActions()
-        
-        # Connect callbacks
-        self.onLayoutFinish.append(self.updatePaneHighlight)
-        
-        # Initialize timers
-        self._setup_timers()
-        
-        debug_print("FileMaster screen initialized successfully")
-    
+        try:
+            import sys
+            
+            # DEBUG 0.1 - Start
+            try:
+                with open("/tmp/westy_screen_debug.log", "a") as f:
+                    from datetime import datetime
+                    f.write(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] [0.1] __init__ started\n")
+            except:
+                pass
+            
+            # DETERMINE SCREEN RESOLUTION HERE (when instance is created, not at import time)
+            try:
+                from enigma import getDesktop
+                desktop = getDesktop(0)
+                width = desktop.size().width()
+                is_fullhd = width >= 1920
+                debug_print(f"[UI] Screen resolution detected: {width}px ({'FullHD' if is_fullhd else 'HD'})")
+                
+                # DEBUG 0.2 - Resolution detected
+                try:
+                    with open("/tmp/westy_screen_debug.log", "a") as f:
+                        from datetime import datetime
+                        f.write(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] [0.2] Resolution detected\n")
+                        f.write(f"  width: {width}\n")
+                        f.write(f"  is_fullhd: {is_fullhd}\n")
+                except:
+                    pass
+                    
+            except Exception as e:
+                debug_print(f"ui.py: Could not detect screen resolution: {e}, defaulting to HD")
+                is_fullhd = False
+                
+                # DEBUG 0.3 - Resolution error
+                try:
+                    with open("/tmp/westy_screen_debug.log", "a") as f:
+                        from datetime import datetime
+                        f.write(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] [0.3] Resolution error: {e}\n")
+                except:
+                    pass
+            
+            # DEBUG - Skin selection
+            try:
+                with open("/tmp/westy_screen_init.log", "a") as f:
+                    from datetime import datetime
+                    f.write(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] Before skin selection\n")
+                    if 'width' in locals():
+                        f.write(f"  Desktop width: {width}\n")
+            except Exception as e:
+                try:
+                    with open("/tmp/westy_screen_init.log", "a") as f:
+                        f.write(f"  Error checking desktop: {e}\n")
+                except:
+                    pass
+            
+            # DEBUG 0.5 - Before skin assignment
+            try:
+                with open("/tmp/westy_screen_debug.log", "a") as f:
+                    from datetime import datetime
+                    f.write(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] [0.5] Before skin assignment\n")
+                    f.write(f"  is_fullhd: {is_fullhd}\n")
+            except:
+                pass
+            
+            # SET SKIN BASED ON DETECTED RESOLUTION
+            if is_fullhd:
+                self.skin = self.SKIN_FULLHD.format("Westy FileMaster PRO", PLUGIN_VERSION)
+                debug_print("[UI] Using FullHD skin")
+            else:
+                self.skin = self.SKIN_HD.format("Westy FileMaster PRO", PLUGIN_VERSION)
+                debug_print("[UI] Using HD skin")
+            
+            # DEBUG 0.6 - After skin assignment
+            try:
+                with open("/tmp/westy_screen_debug.log", "a") as f:
+                    from datetime import datetime
+                    f.write(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] [0.6] After skin assignment\n")
+                    f.write(f"  has skin attr: {hasattr(self, 'skin')}\n")
+                    if hasattr(self, 'skin'):
+                        f.write(f"  skin length: {len(self.skin)}\n")
+            except:
+                pass
+            
+            # DEBUG 1 - Before parent init
+            try:
+                with open("/tmp/westy_screen_debug.log", "a") as f:
+                    from datetime import datetime
+                    f.write(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] [1] About to call Screen.__init__()\n")
+                    f.write(f"  self type: {type(self)}\n")
+                    f.write(f"  has skin: {hasattr(self, 'skin')}\n")
+                    if hasattr(self, 'skin'):
+                        f.write(f"  skin length: {len(self.skin)}\n")
+                        f.write(f"  skin preview: {repr(self.skin[:100])}\n")
+            except Exception as e:
+                try:
+                    with open("/tmp/westy_screen_debug.log", "a") as f:
+                        f.write(f"  Error in debug 1: {e}\n")
+                except:
+                    pass
+            
+            # Now call parent constructor
+            Screen.__init__(self, session)
+            
+            # DEBUG 2 - After parent init
+            try:
+                with open("/tmp/westy_screen_debug.log", "a") as f:
+                    from datetime import datetime
+                    f.write(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] [2] Screen.__init__() completed\n")
+            except:
+                pass
+            
+            debug_print(f"ui.py: Parent Screen.__init__ completed")
+            debug_print("Initializing {} v{}".format(PLUGIN_NAME, PLUGIN_VERSION))
+            
+            # Continue with the rest of your initialization...
+            self._initialize_modules()
+            
+            # Initialize multi-selection manager
+            self.selection_manager = SelectionManager()
+            self.batch_ops = BatchOperations()
+            
+            # Initialize panes
+            self.active_pane = "left"
+            self.left_pane_active = True
+            
+            # Selection state
+            self.multi_select_mode = False
+            self.last_selected_index = None
+            
+            # Initialize UI widgets
+            self._setup_widgets()
+            
+            # Initialize file lists
+            self.initializeFileLists(path_left)
+            
+            # Setup actions
+            self.setupActions()
+            
+            # Connect callbacks
+            self.onLayoutFinish.append(self.updatePaneHighlight)
+            
+            # Initialize timers
+            self._setup_timers()
+            
+            debug_print("FileMaster screen initialized successfully")
+            debug_print(f"ui.py: Screen initialization COMPLETE")
+            
+        except Exception as e:
+            debug_print(f"ui.py: CRITICAL ERROR in screen __init__: {e}")
+            sys.stderr.write(f"ERROR in screen __init__: {e}\n")
+            import traceback
+            traceback.print_exc(file=sys.stderr)
+            raise
     def _initialize_modules(self):
         """Initialize all plugin modules with error handling"""
+        print("DEBUG: _initialize_modules called")
+        import sys
+        
         try:
             self.console = WestyConsole()
         except:
@@ -495,8 +744,14 @@ class WestyFileMasterScreen(Screen):
         # Info labels
         self["left_info"] = Label("")
         self["right_info"] = Label("")
+        # File list widgets
+        self["list_left"] = MenuList([])
+        self["list_right"] = MenuList([])
     
     def _setup_timers(self):
+        debug_print(f"ui.py: _setup_timers called")
+        debug_print(f"  refresh_timer type: {type(self.refresh_timer)}")
+        debug_print(f"  has timeout: {hasattr(self.refresh_timer, 'timeout')}")
         """Setup refresh timer"""
         self.refresh_timer = eTimer()
         try:
@@ -559,6 +814,7 @@ class WestyFileMasterScreen(Screen):
             )
             self["list_right"].setSelectionManager(self.selection_manager, "right")
         except Exception as e:
+            debug_print(f"ui.py: CRITICAL ERROR in screen __init__: {e}")
             debug_print(f"Error creating file lists: {e}")
             # Create simple mock file lists
             class MockFileList:
@@ -909,6 +1165,7 @@ class WestyFileMasterScreen(Screen):
             
             return items
         except Exception as e:
+            debug_print(f"ui.py: CRITICAL ERROR in screen __init__: {e}")
             debug_print("Error getting file list: {}".format(e))
             return []
     
@@ -956,6 +1213,7 @@ class WestyFileMasterScreen(Screen):
                 file_info_cache.invalidate_directory(directory)
                 debug_print("Cleared cache for directory: %s" % directory)
         except Exception as e:
+            debug_print(f"ui.py: CRITICAL ERROR in screen __init__: {e}")
             debug_print("Error clearing cache: %s" % str(e))
 
     def handleFileSelection(self):
@@ -1642,6 +1900,7 @@ class WestyFileMasterScreen(Screen):
             else:
                 status = _("{} | Ready").format(current_time)
         except Exception as e:
+            debug_print(f"ui.py: CRITICAL ERROR in screen __init__: {e}")
             debug_print("Error getting disk space: {}".format(e))
             status = _("{} | System ready").format(current_time)
         
@@ -1695,7 +1954,7 @@ Owner: {}:{}
                         stat.st_gid
                     )
                 except Exception as e:
-                    debug_print("Error: {}".format(e))
+                    debug_print(f"ui.py: Error getting file info: {e}")
                     info = _("Could not read file information: {}").format(str(e))
                 
                 self.session.open(MessageBox, info, MessageBox.TYPE_INFO)
@@ -1787,7 +2046,7 @@ Owner: {}:{}
                 self["status_bar"].setText(_("Folder created: {}").format(name))
                 self.console.log("Folder created: {}".format(path))
             except Exception as e:
-                debug_print("Error: {}".format(e))
+                debug_print(f"ui.py: Error creating folder: {e}")
                 self["status_bar"].setText(_("Error: {}").format(str(e)))
     
     def createFile(self):
@@ -1810,7 +2069,7 @@ Owner: {}:{}
                 self["status_bar"].setText(_("File created: {}").format(name))
                 self.console.log("File created: {}".format(path))
             except Exception as e:
-                debug_print("Error: {}".format(e))
+                debug_print(f"ui.py: Error creating file: {e}")
                 self["status_bar"].setText(_("Error: {}").format(str(e)))
     
     def openSettings(self):
